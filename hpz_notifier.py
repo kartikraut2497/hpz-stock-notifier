@@ -1,7 +1,7 @@
 """
 Headphone Zone Stock Notifier
-Monitors a Headphone Zone product and sends an email when it comes back in stock.
-Designed to run as a GitHub Actions job — reads credentials from environment variables.
+Monitors a specific variant of a Headphone Zone product and sends an email when
+it comes back in stock. Runs as a GitHub Actions job.
 """
 
 import requests
@@ -15,9 +15,9 @@ from email.mime.multipart import MIMEMultipart
 #  CONFIG
 # ─────────────────────────────────────────────
 
-PRODUCT_HANDLE = "headphone-zone-x-tangzu-waner-sg-edition-red"
+PRODUCT_HANDLE   = "headphone-zone-x-tangzu-waner-sg-edition-red"
+TARGET_VARIANT   = "Type-C With Mic"   # exact variant title to watch (case-sensitive)
 
-# Read from GitHub Actions secrets (set these in your repo settings)
 SENDER_EMAIL    = os.environ["SENDER_EMAIL"]
 SENDER_PASSWORD = os.environ["SENDER_PASSWORD"]
 RECEIVER_EMAIL  = os.environ["RECEIVER_EMAIL"]
@@ -42,31 +42,53 @@ def fetch_product() -> dict:
     return resp.json()["product"]
 
 
-def check_availability(product: dict) -> tuple[bool, list[dict]]:
-    available_variants = [
-        v for v in product["variants"]
-        if v.get("available") is True
-    ]
-    return bool(available_variants), available_variants
+def is_variant_available(v: dict) -> bool:
+    avail  = v.get("available")
+    qty    = v.get("inventory_quantity", 0)
+    policy = v.get("inventory_policy", "")
+    return avail is True or (isinstance(qty, int) and qty > 0) or policy == "continue"
 
 
-def format_variant_list(variants: list[dict]) -> str:
-    return "\n".join(
-        f"  • {v.get('title', 'Default')}  —  ₹{v.get('price', 'N/A')}"
-        for v in variants
-    )
+def check_target_variant(product: dict) -> tuple[bool, dict | None]:
+    """
+    Logs all variants for visibility, then returns whether the
+    TARGET_VARIANT specifically is available.
+    """
+    log.info("── Variant breakdown ──────────────────────────")
+    target = None
+    for v in product["variants"]:
+        title  = v.get("title", "Default")
+        avail  = v.get("available")
+        qty    = v.get("inventory_quantity", "N/A")
+        policy = v.get("inventory_policy", "N/A")
+        marker = " ← watching this" if title == TARGET_VARIANT else ""
+        log.info(
+            "  %s | available=%s | qty=%s | policy=%s%s",
+            title, avail, qty, policy, marker,
+        )
+        if title == TARGET_VARIANT:
+            target = v
+    log.info("───────────────────────────────────────────────")
+
+    if target is None:
+        log.warning(
+            "Variant '%s' not found in product. "
+            "Check the exact title in the logs above.", TARGET_VARIANT
+        )
+        return False, None
+
+    return is_variant_available(target), target
 
 
-def send_email(product_title: str, variants: list[dict]):
-    subject = f"✅ Back in Stock: {product_title}"
+def send_email(product_title: str, variant: dict):
+    subject = f"✅ Back in Stock: {product_title} — {TARGET_VARIANT}"
     body = f"""\
-Good news! The following product is now available on Headphone Zone:
+Good news! The variant you're watching is now available on Headphone Zone:
 
-{product_title}
-{PRODUCT_URL}
-
-Available variants:
-{format_variant_list(variants)}
+Product : {product_title}
+Variant : {variant.get('title')}
+Price   : ₹{variant.get('price')}
+Link    : {PRODUCT_URL}
 
 Head over and grab it before it sells out again!
 """
@@ -84,19 +106,17 @@ Head over and grab it before it sells out again!
 
 
 def main():
-    log.info("Checking stock for: %s", PRODUCT_HANDLE)
+    log.info("Watching variant '%s' of: %s", TARGET_VARIANT, PRODUCT_HANDLE)
 
-    product = fetch_product()
-    title   = product.get("title", PRODUCT_HANDLE)
-    in_stock, available_variants = check_availability(product)
+    product  = fetch_product()
+    title    = product.get("title", PRODUCT_HANDLE)
+    in_stock, variant = check_target_variant(product)
 
     if in_stock:
-        log.info("✅ IN STOCK — %s", title)
-        for v in available_variants:
-            log.info("  Variant: %s | Price: ₹%s", v.get("title"), v.get("price"))
-        send_email(title, available_variants)
+        log.info("✅ IN STOCK — %s | %s | ₹%s", title, variant.get("title"), variant.get("price"))
+        send_email(title, variant)
     else:
-        log.info("❌ Out of stock — %s. No email sent.", title)
+        log.info("❌ Out of stock — %s [%s]. No email sent.", title, TARGET_VARIANT)
 
 
 if __name__ == "__main__":
