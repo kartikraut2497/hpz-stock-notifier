@@ -15,7 +15,7 @@ from email.mime.multipart import MIMEMultipart
 #  CONFIG
 # ─────────────────────────────────────────────
 
-PRODUCT_HANDLE = "tangzu-waner-s-g-2-red-lion-edition"
+PRODUCT_HANDLE = "headphone-zone-x-tangzu-waner-sg-edition-red"
 
 # Read from GitHub Actions secrets (set these in your repo settings)
 SENDER_EMAIL    = os.environ["SENDER_EMAIL"]
