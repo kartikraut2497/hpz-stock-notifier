@@ -16,7 +16,7 @@ from email.mime.multipart import MIMEMultipart
 # ─────────────────────────────────────────────
 
 PRODUCT_HANDLE   = "headphone-zone-x-tangzu-waner-sg-edition-red"
-TARGET_VARIANT   = "Type-C With Mic"   # exact variant title to watch (case-sensitive)
+TARGET_VARIANT   = "Type-C"   # exact variant title to watch (case-sensitive)
 
 SENDER_EMAIL    = os.environ["SENDER_EMAIL"]
 SENDER_PASSWORD = os.environ["SENDER_PASSWORD"]
